@@ -4,18 +4,19 @@ import Layout from './components/Layout';
 import FileUpload from './components/FileUpload';
 import AnalysisDashboard from './components/AnalysisDashboard';
 import Pricing from './components/Pricing';
+import ChatBot from './components/ChatBot';
 import { AppView, Report, AnalysisResult } from './types';
 import { analyzeData } from './services/geminiService';
-// Added missing FileText import to resolve error on line 188
-import { FileBarChart, Clock, Database, ChevronRight, Play, FileText } from 'lucide-react';
+import { GoogleGenAI } from "@google/genai";
+import { FileBarChart, Clock, Database, ChevronRight, Play, FileText, Zap, Sparkles } from 'lucide-react';
 
 const App: React.FC = () => {
   const [currentView, setView] = useState<AppView>('dashboard');
   const [reports, setReports] = useState<Report[]>([]);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [activeReport, setActiveReport] = useState<Report | null>(null);
+  const [quickInsight, setQuickInsight] = useState<string | null>(null);
 
-  // Load sample reports or from storage
   useEffect(() => {
     const saved = localStorage.getItem('insight_stream_reports');
     if (saved) {
@@ -25,6 +26,24 @@ const App: React.FC = () => {
 
   const handleDataLoaded = async (data: any[], fileName: string) => {
     setIsAnalyzing(true);
+    setQuickInsight(null);
+
+    // Concurrent request: Use Flash-Lite for immediate low-latency insight
+    const generateQuickInsight = async () => {
+      try {
+        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+        const sample = JSON.stringify(data.slice(0, 10));
+        const res = await ai.models.generateContent({
+          model: 'gemini-flash-lite-latest',
+          contents: `Provide a one-sentence "Flash Insight" for this dataset sample: ${sample}`,
+        });
+        setQuickInsight(res.text || "Dataset detected.");
+      } catch (e) {
+        console.error("Flash insight failed", e);
+      }
+    };
+    generateQuickInsight();
+
     try {
       const result = await analyzeData(data, fileName);
       const newReport: Report = {
@@ -80,7 +99,7 @@ const App: React.FC = () => {
               </div>
               <div className="hidden lg:block relative">
                  <div className="w-80 h-80 bg-gradient-to-br from-indigo-500/20 to-purple-500/20 rounded-full blur-3xl absolute -z-10 animate-pulse" />
-                 <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-2xl w-full max-sm rotate-3 hover:rotate-0 transition-transform duration-500">
+                 <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-2xl w-full max-w-xs rotate-3 hover:rotate-0 transition-transform duration-500">
                     <div className="flex items-center gap-3 mb-6">
                       <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center">
                         <FileBarChart className="text-indigo-600" />
@@ -97,7 +116,9 @@ const App: React.FC = () => {
                     </div>
                     <div className="mt-8 pt-6 border-t border-slate-100 flex justify-between items-center">
                        <span className="text-xs font-bold text-green-600">98% Accuracy</span>
-                       <span className="text-xs text-slate-400">Gemini 3 Pro</span>
+                       <span className="text-xs text-slate-400 flex items-center gap-1">
+                         <Sparkles className="w-3 h-3" /> Gemini 3 Pro
+                       </span>
                     </div>
                  </div>
               </div>
@@ -155,13 +176,25 @@ const App: React.FC = () => {
         );
       case 'upload':
         return (
-          <div className="py-12">
+          <div className="py-12 space-y-6">
             <FileUpload onDataLoaded={handleDataLoaded} isLoading={isAnalyzing} />
+            {isAnalyzing && quickInsight && (
+              <div className="max-w-2xl mx-auto p-4 bg-indigo-50 border border-indigo-100 rounded-2xl flex items-center gap-3 animate-pulse">
+                <Zap className="text-indigo-600 w-5 h-5 flex-shrink-0" />
+                <p className="text-sm text-indigo-800 font-medium">
+                  <span className="font-bold">Instant Fact:</span> {quickInsight}
+                </p>
+              </div>
+            )}
           </div>
         );
       case 'analysis':
         return activeReport ? (
-          <AnalysisDashboard analysis={activeReport.analysis} reportName={activeReport.name} />
+          <AnalysisDashboard 
+            analysis={activeReport.analysis} 
+            reportName={activeReport.name} 
+            data={activeReport.data}
+          />
         ) : (
           <div className="text-center py-20">
             <p>No active report. Please upload data first.</p>
@@ -215,6 +248,7 @@ const App: React.FC = () => {
   return (
     <Layout currentView={currentView} setView={setView}>
       {renderView()}
+      <ChatBot activeReport={activeReport} />
     </Layout>
   );
 };

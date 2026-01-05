@@ -14,10 +14,12 @@ export interface AnalysisResult {
 }
 
 export interface ChartConfig {
-  type: 'bar' | 'line' | 'pie' | 'area';
+  type: 'bar' | 'line' | 'pie' | 'area' | 'scatter' | 'radar';
   title: string;
   xAxis: string;
-  yAxis: string;
+  yAxis: string; // Primary key for value
+  category?: string; // Optional key for grouping/series categorization
+  additionalKeys?: string[]; // Optional extra keys for multi-series
   data: any[];
 }
 
