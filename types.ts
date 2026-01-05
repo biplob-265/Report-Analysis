@@ -3,9 +3,24 @@ export interface DataRow {
   [key: string]: any;
 }
 
+export interface AnalysisConfig {
+  model: 'flash' | 'pro';
+  detailLevel: 'concise' | 'standard' | 'exhaustive';
+  features: {
+    trendPrediction: boolean;
+    anomalyDetection: boolean;
+    correlationAnalysis: boolean;
+    strategicForecasting: boolean;
+  };
+}
+
 export interface AnalysisResult {
   summary: string;
   insights: string[];
+  performancePulse: {
+    strengths: string[];
+    risks: string[];
+  };
   suggestedCharts: ChartConfig[];
   statistics: {
     label: string;
