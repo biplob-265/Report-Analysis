@@ -1,0 +1,7 @@
+{
+  "name": "Copy of InsightStream AI - Data Analyzer & Report Generator",
+  "description": "A high-performance AI-powered data analysis platform that transforms raw datasets into interactive visual reports using Gemini 3.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
