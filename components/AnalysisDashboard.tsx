@@ -10,16 +10,16 @@ import {
   Download, Share2, FileText, ChevronRight, Filter, Sparkles, 
   Image as ImageIcon, FileCode, FileType, ZoomIn, ZoomOut, RotateCcw,
   ExternalLink, Code, Link as LinkIcon, Check, GripVertical, FileJson, Columns, 
-  X, CheckSquare, Square, Maximize2, Settings2, MoreHorizontal, Loader2,
+  X, CheckSquare, Square, Maximize2, Settings2, MoreHorizontal, Loader2, Layers,
   ListFilter, Hash, Search, Trash2, SlidersHorizontal, Palette, Plus, Pipette,
   ChevronDown, ChevronUp, ChevronsUpDown, ArrowUpDown, Table as TableIcon,
   ChevronLeft, ChevronRight as ChevronRightIcon, TableProperties, Camera, Settings,
   PlusCircle, Equal, ChevronRightSquare, MoveHorizontal, Grab, Copy, FileDown,
   Info, ArrowUpRight, AlertTriangle, TrendingUp, TrendingDown, Target, ShieldCheck, 
   ListFilter as FilterIcon, Settings as SettingsIcon, Sliders, Eraser, Wand2, Shield,
-  RefreshCw, MousePointer2, Plus as PlusIcon, Activity, Sparkle,
-  // Fix: Added missing CheckCircle2 import
-  CheckCircle2
+  RefreshCw, MousePointer2, Plus as PlusIcon, Activity, Sparkle, CheckCircle2,
+  BarChart3, LineChart as LineChartIcon, PieChart as PieChartIcon, AreaChart as AreaChartIcon,
+  ScatterChart as ScatterChartIcon, Radar as RadarIcon, Waves
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import { AnalysisResult, ChartConfig, DataRow, AnalysisConfig } from '../types';
@@ -61,12 +61,28 @@ const PALETTES = {
 
 const slugify = (text: string) => text.toLowerCase().replace(/\s+/g, '-').replace(/[^\w-]+/g, '');
 
+const calculateAUC = (data: any[], xKey: string, yKey: string) => {
+  if (data.length < 2) return '0.000';
+  // Sort by X-axis (FPR usually)
+  const sorted = [...data].sort((a, b) => (Number(a[xKey]) || 0) - (Number(b[xKey]) || 0));
+  let area = 0;
+  for (let i = 1; i < sorted.length; i++) {
+    const x1 = Number(sorted[i - 1][xKey]) || 0;
+    const x2 = Number(sorted[i][xKey]) || 0;
+    const y1 = Number(sorted[i - 1][yKey]) || 0;
+    const y2 = Number(sorted[i][yKey]) || 0;
+    // Trapezoidal rule
+    area += (x2 - x1) * (y1 + y2) / 2;
+  }
+  return area.toFixed(3);
+};
+
 const CustomTooltip = ({ active, payload, label, xAxis, yAxis, type }: any) => {
   if (active && payload && payload.length) {
     return (
       <div className="bg-white/95 backdrop-blur-md p-4 rounded-2xl shadow-2xl border border-slate-100 text-sm animate-in fade-in zoom-in-95 duration-200">
         <p className="font-bold text-slate-900 mb-2 border-b border-slate-50 pb-1">
-          {type === 'scatter' ? 'Point Data' : label}
+          {type === 'roc' ? 'ROC Threshold Point' : type === 'scatter' ? 'Point Data' : label}
         </p>
         <div className="space-y-2">
           {payload.map((item: any, index: number) => (
@@ -77,11 +93,16 @@ const CustomTooltip = ({ active, payload, label, xAxis, yAxis, type }: any) => {
                   <span className="text-slate-500 font-medium">{item.name || yAxis}</span>
                 </div>
                 <span className="font-mono font-bold text-slate-900">
-                  {typeof item.value === 'number' ? item.value.toLocaleString() : item.value}
+                  {typeof item.value === 'number' ? item.value.toLocaleString(undefined, { maximumFractionDigits: 3 }) : item.value}
                 </span>
               </div>
             </div>
           ))}
+          {type === 'roc' && (
+            <div className="pt-2 border-t border-slate-50 mt-2 text-[10px] text-slate-400 font-bold uppercase">
+              Sensitivity vs FPR
+            </div>
+          )}
         </div>
       </div>
     );
@@ -101,6 +122,124 @@ interface DataCleaningOptions {
   removeDuplicates: boolean;
   standardizeText: boolean;
 }
+
+const ChartArchitectModal: React.FC<{
+  isOpen: boolean;
+  onClose: () => void;
+  onAdd: (chart: ChartConfig) => void;
+  columns: string[];
+}> = ({ isOpen, onClose, onAdd, columns }) => {
+  const [config, setConfig] = useState<Partial<ChartConfig>>({
+    type: 'bar',
+    title: 'Custom Visualization',
+    xAxis: columns[0] || '',
+    yAxis: columns[1] || columns[0] || '',
+  });
+
+  if (!isOpen) return null;
+
+  const chartTypes = [
+    { id: 'bar', label: 'Bar Chart', icon: BarChart3 },
+    { id: 'line', label: 'Line Chart', icon: LineChartIcon },
+    { id: 'area', label: 'Area Chart', icon: AreaChartIcon },
+    { id: 'scatter', label: 'Scatter Plot', icon: ScatterChartIcon },
+    { id: 'roc', label: 'ROC Curve', icon: Activity },
+    { id: 'pie', label: 'Pie Chart', icon: PieChartIcon },
+  ];
+
+  return (
+    <div className="fixed inset-0 z-[600] flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative bg-white w-full max-w-2xl rounded-[3.5rem] shadow-2xl border border-slate-100 flex flex-col animate-in zoom-in-95 duration-200">
+        <div className="p-8 border-b border-slate-50 flex items-center justify-between bg-slate-50/40">
+          <div className="flex items-center gap-5">
+            <div className="w-14 h-14 bg-indigo-600 rounded-[1.25rem] flex items-center justify-center shadow-lg">
+              <PlusCircle className="w-7 h-7 text-white" />
+            </div>
+            <div>
+              <h3 className="text-2xl font-black text-slate-900 tracking-tight">Chart Architect</h3>
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Manual Visualization Lab</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="p-3 hover:bg-white hover:shadow-sm rounded-2xl transition-all">
+            <X className="w-6 h-6 text-slate-400" />
+          </button>
+        </div>
+
+        <div className="p-10 space-y-8 overflow-y-auto max-h-[60vh]">
+          <div className="space-y-4">
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Chart Title</p>
+            <input 
+              type="text" 
+              value={config.title} 
+              onChange={e => setConfig({...config, title: e.target.value})}
+              className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-6 py-4 text-sm font-bold focus:ring-4 focus:ring-indigo-500/10 outline-none"
+              placeholder="Analysis Name..."
+            />
+          </div>
+
+          <div className="space-y-4">
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Visual Type</p>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+              {chartTypes.map((type) => (
+                <button 
+                  key={type.id} 
+                  onClick={() => setConfig({...config, type: type.id as any})}
+                  className={`flex items-center gap-3 p-4 rounded-2xl border-2 transition-all ${config.type === type.id ? 'border-indigo-600 bg-indigo-50 text-indigo-700' : 'border-transparent bg-slate-50 text-slate-500 hover:bg-slate-100'}`}
+                >
+                  <type.icon className="w-5 h-5" />
+                  <span className="text-xs font-black uppercase tracking-tight">{type.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-6">
+            <div className="space-y-4">
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">X-Axis (Independent)</p>
+              <select 
+                value={config.xAxis} 
+                onChange={e => setConfig({...config, xAxis: e.target.value})}
+                className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-6 py-4 text-sm font-bold focus:ring-4 focus:ring-indigo-500/10 outline-none cursor-pointer"
+              >
+                {columns.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+            <div className="space-y-4">
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Y-Axis (Dependent)</p>
+              <select 
+                value={config.yAxis} 
+                onChange={e => setConfig({...config, yAxis: e.target.value})}
+                className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-6 py-4 text-sm font-bold focus:ring-4 focus:ring-indigo-500/10 outline-none cursor-pointer"
+              >
+                {columns.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+          </div>
+
+          {config.type === 'roc' && (
+            <div className="bg-amber-50 border border-amber-100 p-6 rounded-[2rem] flex gap-4">
+              <Info className="w-6 h-6 text-amber-500 flex-shrink-0" />
+              <p className="text-[10px] font-bold text-amber-800 leading-relaxed uppercase tracking-wider">
+                Note: ROC curves visualize classification performance. Set X-Axis to FPR (False Positive Rate) and Y-Axis to TPR (True Positive Rate/Sensitivity).
+              </p>
+            </div>
+          )}
+        </div>
+
+        <div className="p-10 bg-slate-50 border-t border-slate-100 flex gap-4">
+          <button onClick={onClose} className="flex-1 py-4 bg-white border border-slate-200 rounded-2xl text-[11px] font-black uppercase tracking-widest text-slate-600 hover:bg-slate-100 transition-all">Discard</button>
+          <button 
+            onClick={() => onAdd(config as ChartConfig)} 
+            className="flex-1 py-4 bg-indigo-600 text-white rounded-2xl text-[11px] font-black uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-xl shadow-indigo-100"
+          >
+            Create Visualization
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 const FilterModal: React.FC<{ 
   isOpen: boolean; 
@@ -378,7 +517,7 @@ const RenderChart: React.FC<RenderChartProps> = ({
   };
 
   const allSeriesKeys = useMemo(() => [yAxis, ...additionalKeys], [yAxis, additionalKeys]);
-  const axisStyle = { fill: '#64748b', fontSize: 10, fontWeight: 600, fontFamily: 'Inter, sans-serif' };
+  const axisStyle = { fill: '#64748b', fontSize: 10, fontStyle: 600, fontFamily: 'Inter, sans-serif' };
 
   return (
     <div 
@@ -391,7 +530,7 @@ const RenderChart: React.FC<RenderChartProps> = ({
       <div className="flex justify-between items-start mb-6">
         <div className="flex-1">
           <div className="flex items-center gap-2">
-            {type === 'roc' && <Activity className="w-4 h-4 text-indigo-600" />}
+            {type === 'roc' ? <Activity className="w-4 h-4 text-indigo-600" /> : <BarChart3 className="w-4 h-4 text-slate-400" />}
             <h3 className="text-base font-black text-slate-900 truncate tracking-tight pr-4">{title}</h3>
           </div>
           <div className="flex items-center gap-2 mt-1.5">
@@ -399,6 +538,11 @@ const RenderChart: React.FC<RenderChartProps> = ({
             {filters.length > 0 && (
               <span className="text-[9px] font-black text-indigo-500 uppercase tracking-widest bg-indigo-50 px-2 py-0.5 rounded-full flex items-center gap-1.5">
                 <Check className="w-2.5 h-2.5" /> Lab Active ({filters.length})
+              </span>
+            )}
+            {type === 'roc' && (
+              <span className="text-[9px] font-black text-emerald-600 uppercase tracking-widest bg-emerald-50 px-2 py-0.5 rounded-full flex items-center gap-1.5 shadow-sm">
+                AUC: {calculateAUC(zoomedData, xAxis, yAxis)}
               </span>
             )}
           </div>
@@ -503,14 +647,14 @@ const RenderChart: React.FC<RenderChartProps> = ({
                 ))}
               </AreaChart>
             ) : type === 'roc' ? (
-              <LineChart data={zoomedData.sort((a,b) => (a[xAxis] || 0) - (b[xAxis] || 0))} margin={{ top: 5, right: 5, left: -20, bottom: 5 }}>
+              <LineChart data={zoomedData.sort((a,b) => (Number(a[xAxis]) || 0) - (Number(b[xAxis]) || 0))} margin={{ top: 5, right: 5, left: -20, bottom: 5 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={true} horizontal={true} stroke="#f1f5f9" />
-                <XAxis dataKey={xAxis} axisLine={false} tickLine={false} tick={{ ...axisStyle }} domain={[0, 1]} type="number" />
-                <YAxis axisLine={false} tickLine={false} tick={{ ...axisStyle }} domain={[0, 1]} type="number" />
-                <Tooltip content={<CustomTooltip xAxis={xAxis} yAxis={yAxis} />} />
+                <XAxis dataKey={xAxis} axisLine={false} tickLine={false} tick={{ ...axisStyle }} domain={[0, 1]} type="number" name="FPR" />
+                <YAxis axisLine={false} tickLine={false} tick={{ ...axisStyle }} domain={[0, 1]} type="number" name="TPR" />
+                <Tooltip content={<CustomTooltip xAxis={xAxis} yAxis={yAxis} type="roc" />} />
                 <ReferenceLine segment={[{ x: 0, y: 0 }, { x: 1, y: 1 }]} stroke="#cbd5e1" strokeDasharray="4 4" strokeWidth={2} />
                 {allSeriesKeys.map((key, idx) => isVisible(key) && (
-                  <Line key={key} type="monotone" dataKey={key} stroke={colors[idx % colors.length]} strokeWidth={3} dot={{ r: 3 }} />
+                  <Line key={key} type="monotone" dataKey={key} stroke={colors[idx % colors.length]} strokeWidth={3} dot={{ r: 4, fill: colors[idx % colors.length] }} />
                 ))}
               </LineChart>
             ) : (
@@ -803,13 +947,14 @@ const DataCleaningLab: React.FC<{
 };
 
 const AnalysisDashboard: React.FC<AnalysisDashboardProps> = ({ analysis, reportName, data, onReanalyze }) => {
-  const [charts] = useState<ChartConfig[]>(analysis.suggestedCharts);
+  const [charts, setCharts] = useState<ChartConfig[]>(analysis.suggestedCharts);
   const [isCompareMode, setIsCompareMode] = useState(false);
   const [selectedIndices, setSelectedIndices] = useState<number[]>([]);
   const [showComparisonView, setShowComparisonView] = useState(false);
   const [activePaletteKey, setActivePaletteKey] = useState<keyof typeof PALETTES>('default');
   const [showPaletteSelector, setShowPaletteSelector] = useState(false);
   const [showCleaningLab, setShowCleaningLab] = useState(false);
+  const [showChartArchitect, setShowChartArchitect] = useState(false);
   const [isCapturingPdf, setIsCapturingPdf] = useState(false);
   const [copySuccess, setCopySuccess] = useState(false);
   const [syncZoom, setSyncZoom] = useState(1);
@@ -824,6 +969,8 @@ const AnalysisDashboard: React.FC<AnalysisDashboardProps> = ({ analysis, reportN
     setCopySuccess(true);
     setTimeout(() => setCopySuccess(false), 2000);
   };
+
+  const dataColumns = useMemo(() => (data.length > 0 ? Object.keys(data[0]) : []), [data]);
 
   const handleApplyCleaning = (options: DataCleaningOptions) => {
     let cleaned = [...data];
@@ -895,6 +1042,12 @@ const AnalysisDashboard: React.FC<AnalysisDashboardProps> = ({ analysis, reportN
     setShowCleaningLab(false);
   };
 
+  const handleAddCustomChart = (newChart: ChartConfig) => {
+    const chartWithData = { ...newChart, data: data.slice(0, 100) };
+    setCharts([chartWithData, ...charts]);
+    setShowChartArchitect(false);
+  };
+
   const exportMarkdown = () => {
     const content = `# Report: ${reportName}\n\n## Executive Summary\n${analysis.summary}\n\n## Strategic Insights\n${analysis.insights.map(i => `- ${i}`).join('\n')}`;
     const blob = new Blob([content], { type: 'text/markdown' });
@@ -928,8 +1081,8 @@ const AnalysisDashboard: React.FC<AnalysisDashboardProps> = ({ analysis, reportN
     if (count === 1) return 'grid-cols-1';
     if (count === 2) return 'grid-cols-1 lg:grid-cols-2';
     if (count === 3) return 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3';
-    if (count === 4) return 'grid-cols-1 md:grid-cols-2'; // 2x2 is better for 4 charts
-    return 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3'; // 5+ charts
+    if (count === 4) return 'grid-cols-1 md:grid-cols-2';
+    return 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3';
   }, [selectedIndices.length]);
 
   return (
@@ -944,6 +1097,7 @@ const AnalysisDashboard: React.FC<AnalysisDashboardProps> = ({ analysis, reportN
         </div>
         <div className="flex flex-wrap items-center gap-3 relative">
           <div className="bg-white p-1.5 rounded-[2rem] border border-slate-200 shadow-sm flex gap-1.5">
+             <button onClick={() => setShowChartArchitect(true)} className="p-3 hover:bg-slate-50 rounded-2xl transition-all text-indigo-600" title="Chart Architect"><PlusIcon className="w-6 h-6" /></button>
              <button onClick={() => setShowPaletteSelector(!showPaletteSelector)} className={`p-3 rounded-2xl transition-all ${showPaletteSelector ? 'bg-indigo-600 text-white shadow-lg' : 'hover:bg-slate-50 text-indigo-600'}`} title="Color Architectures"><Palette className="w-6 h-6" /></button>
              <button onClick={() => setShowCleaningLab(true)} className="p-3 hover:bg-slate-50 rounded-2xl transition-all" title="Cleaning Lab"><Eraser className="w-6 h-6 text-emerald-600" /></button>
              <button onClick={exportToPdf} disabled={isCapturingPdf} className="p-3 hover:bg-slate-50 rounded-2xl transition-all" title="Export PDF"><FileDown className="w-6 h-6 text-indigo-600" /></button>
@@ -974,6 +1128,7 @@ const AnalysisDashboard: React.FC<AnalysisDashboardProps> = ({ analysis, reportN
       </div>
 
       <DataCleaningLab isOpen={showCleaningLab} onClose={() => setShowCleaningLab(false)} onApply={handleApplyCleaning} data={data} />
+      <ChartArchitectModal isOpen={showChartArchitect} onClose={() => setShowChartArchitect(false)} onAdd={handleAddCustomChart} columns={dataColumns} />
 
       {!showComparisonView ? (
         <div className="space-y-20 animate-in fade-in duration-1000">
