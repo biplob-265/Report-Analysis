@@ -74,8 +74,9 @@ export const analyzeData = async (data: any[], fileName: string, config: Analysi
      - Strengths: Identifying peak performance levels and positive trajectories.
      - Risks: Identifying level-specific anomalies and critical intervention points.
   4. VISUALIZATION MAPPING: Generate 4-6 chart configs.
-     - Types: 'bar', 'line', 'pie', 'area', 'scatter', 'radar'.
+     - Types: 'bar', 'line', 'pie', 'area', 'scatter', 'radar', 'roc'.
      - Ensure 'xAxis' and 'yAxis' use exact column names from profiling.
+     - Use 'roc' specifically if classification metrics like True Positive Rate (TPR) or False Positive Rate (FPR) are detected.
   5. GLOBAL STATISTICS: High-level metrics representing the entire dataset range.
 
   REPRESENTATIVE DATA RECORDS (FOR LEVEL ENCODING CONTEXT):

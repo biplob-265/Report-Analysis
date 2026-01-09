@@ -29,7 +29,7 @@ export interface AnalysisResult {
 }
 
 export interface ChartConfig {
-  type: 'bar' | 'line' | 'pie' | 'area' | 'scatter' | 'radar';
+  type: 'bar' | 'line' | 'pie' | 'area' | 'scatter' | 'radar' | 'roc';
   title: string;
   xAxis: string;
   yAxis: string; // Primary key for value

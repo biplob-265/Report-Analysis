@@ -4,20 +4,22 @@ import {
   BarChart, Bar, LineChart, Line, PieChart, Pie, AreaChart, Area, 
   ScatterChart, Scatter, RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, Legend, ZAxis,
-  ReferenceArea
+  ReferenceLine
 } from 'recharts';
 import { 
   Download, Share2, FileText, ChevronRight, Filter, Sparkles, 
   Image as ImageIcon, FileCode, FileType, ZoomIn, ZoomOut, RotateCcw,
   ExternalLink, Code, Link as LinkIcon, Check, GripVertical, FileJson, Columns, 
-  Layers, X, CheckSquare, Square, Maximize2, Settings2, MoreHorizontal, Loader2,
+  X, CheckSquare, Square, Maximize2, Settings2, MoreHorizontal, Loader2,
   ListFilter, Hash, Search, Trash2, SlidersHorizontal, Palette, Plus, Pipette,
   ChevronDown, ChevronUp, ChevronsUpDown, ArrowUpDown, Table as TableIcon,
   ChevronLeft, ChevronRight as ChevronRightIcon, TableProperties, Camera, Settings,
   PlusCircle, Equal, ChevronRightSquare, MoveHorizontal, Grab, Copy, FileDown,
   Info, ArrowUpRight, AlertTriangle, TrendingUp, TrendingDown, Target, ShieldCheck, 
   ListFilter as FilterIcon, Settings as SettingsIcon, Sliders, Eraser, Wand2, Shield,
-  RefreshCw, MousePointer2, Plus as PlusIcon
+  RefreshCw, MousePointer2, Plus as PlusIcon, Activity, Sparkle,
+  // Fix: Added missing CheckCircle2 import
+  CheckCircle2
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import { AnalysisResult, ChartConfig, DataRow, AnalysisConfig } from '../types';
@@ -201,7 +203,7 @@ const FilterModal: React.FC<{
                       value={rule.value} 
                       placeholder="Enter value..."
                       onChange={e => updateRule(rule.id, { value: e.target.value })}
-                      className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-bold outline-none focus:ring-4 focus:ring-indigo-500/10 transition-all"
+                      className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-bold text-blue-600 outline-none focus:ring-4 focus:ring-indigo-500/10 transition-all"
                     />
                   </div>
                   <div className="col-span-12 md:col-span-1 flex items-end justify-center">
@@ -327,7 +329,7 @@ const RenderChart: React.FC<RenderChartProps> = ({
 
   const displayLimit = 100;
   const zoomedData = useMemo(() => {
-    if (type === 'scatter') return filteredData;
+    if (type === 'scatter' || type === 'roc') return filteredData;
     
     let baseData = filteredData;
     if (zoomLevel <= 1) {
@@ -388,9 +390,12 @@ const RenderChart: React.FC<RenderChartProps> = ({
     >
       <div className="flex justify-between items-start mb-6">
         <div className="flex-1">
-          <h3 className="text-base font-black text-slate-900 truncate tracking-tight pr-4">{title}</h3>
+          <div className="flex items-center gap-2">
+            {type === 'roc' && <Activity className="w-4 h-4 text-indigo-600" />}
+            <h3 className="text-base font-black text-slate-900 truncate tracking-tight pr-4">{title}</h3>
+          </div>
           <div className="flex items-center gap-2 mt-1.5">
-            <div className="h-1 w-8 bg-indigo-500 rounded-full opacity-50" />
+            <div className={`h-1 w-8 rounded-full opacity-50 ${type === 'roc' ? 'bg-indigo-600' : 'bg-indigo-500'}`} />
             {filters.length > 0 && (
               <span className="text-[9px] font-black text-indigo-500 uppercase tracking-widest bg-indigo-50 px-2 py-0.5 rounded-full flex items-center gap-1.5">
                 <Check className="w-2.5 h-2.5" /> Lab Active ({filters.length})
@@ -405,12 +410,12 @@ const RenderChart: React.FC<RenderChartProps> = ({
                 <button 
                   onClick={(e) => { e.stopPropagation(); setZoom(Math.min(zoomLevel + 0.5, 5)); }}
                   className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-white hover:shadow-sm rounded-xl transition-all"
-                  disabled={zoomLevel >= 5}
+                  disabled={zoomLevel >= 5 || type === 'roc'}
                 ><ZoomIn className="w-4 h-4" /></button>
                 <button 
                   onClick={(e) => { e.stopPropagation(); setZoom(Math.max(zoomLevel - 0.5, 1)); }}
                   className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-white hover:shadow-sm rounded-xl transition-all"
-                  disabled={zoomLevel <= 1}
+                  disabled={zoomLevel <= 1 || type === 'roc'}
                 ><ZoomOut className="w-4 h-4" /></button>
               </div>
 
@@ -497,6 +502,17 @@ const RenderChart: React.FC<RenderChartProps> = ({
                   <Area key={key} type="monotone" dataKey={key} stroke={colors[idx % colors.length]} fill={colors[idx % colors.length]} fillOpacity={0.25} strokeWidth={2.5} />
                 ))}
               </AreaChart>
+            ) : type === 'roc' ? (
+              <LineChart data={zoomedData.sort((a,b) => (a[xAxis] || 0) - (b[xAxis] || 0))} margin={{ top: 5, right: 5, left: -20, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="3 3" vertical={true} horizontal={true} stroke="#f1f5f9" />
+                <XAxis dataKey={xAxis} axisLine={false} tickLine={false} tick={{ ...axisStyle }} domain={[0, 1]} type="number" />
+                <YAxis axisLine={false} tickLine={false} tick={{ ...axisStyle }} domain={[0, 1]} type="number" />
+                <Tooltip content={<CustomTooltip xAxis={xAxis} yAxis={yAxis} />} />
+                <ReferenceLine segment={[{ x: 0, y: 0 }, { x: 1, y: 1 }]} stroke="#cbd5e1" strokeDasharray="4 4" strokeWidth={2} />
+                {allSeriesKeys.map((key, idx) => isVisible(key) && (
+                  <Line key={key} type="monotone" dataKey={key} stroke={colors[idx % colors.length]} strokeWidth={3} dot={{ r: 3 }} />
+                ))}
+              </LineChart>
             ) : (
               <LineChart data={zoomedData} margin={{ top: 5, right: 5, left: -20, bottom: 5 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
@@ -521,7 +537,7 @@ const RenderChart: React.FC<RenderChartProps> = ({
       </div>
 
       <div className="mt-6 no-export">
-        {zoomLevel > 1 && zoomedData.length > 0 && (
+        {zoomLevel > 1 && zoomedData.length > 0 && type !== 'roc' && (
           <div className="flex items-center gap-4 bg-slate-50 p-3 rounded-2xl border border-slate-100 mb-2">
             <MoveHorizontal className="w-4 h-4 text-indigo-400" />
             <input 
@@ -539,7 +555,8 @@ const RenderChart: React.FC<RenderChartProps> = ({
           <span className="text-[10px] font-black text-slate-300 uppercase tracking-widest">
             {filteredData.length.toLocaleString()} nodes scoped
           </span>
-          {zoomLevel > 1 && <span className="text-[10px] font-black text-indigo-600 uppercase tracking-widest">Zoom: {zoomLevel}x</span>}
+          {zoomLevel > 1 && type !== 'roc' && <span className="text-[10px] font-black text-indigo-600 uppercase tracking-widest">Zoom: {zoomLevel}x</span>}
+          {type === 'roc' && <span className="text-[10px] font-black text-indigo-600 uppercase tracking-widest">Classification Probabilities</span>}
         </div>
       </div>
     </div>
@@ -590,7 +607,7 @@ const DataTable: React.FC<DataTableProps> = ({ data, columns: overrideColumns, t
         </div>
         <div className="relative group">
           <Search className="absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 group-focus-within:text-indigo-500 transition-colors" />
-          <input type="text" placeholder="Search records..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="bg-white border border-slate-200 rounded-2xl pl-14 pr-8 py-4 text-sm font-bold focus:ring-[12px] focus:ring-indigo-500/5 outline-none w-full md:w-80 transition-all shadow-sm" />
+          <input type="text" placeholder="Search records..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="bg-white border border-slate-200 rounded-2xl pl-14 pr-8 py-4 text-sm font-bold text-blue-600 focus:ring-[12px] focus:ring-indigo-500/5 outline-none w-full md:w-80 transition-all shadow-sm" />
         </div>
       </div>
       <div className="overflow-x-auto">
@@ -686,7 +703,7 @@ const DataCleaningLab: React.FC<{
   return (
     <div className="fixed inset-0 z-[600] flex items-center justify-center p-4 no-export">
       <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm transition-opacity" onClick={onClose} />
-      <div className="relative bg-white w-full max-w-xl rounded-[3.5rem] shadow-2xl border border-slate-100 flex flex-col animate-in zoom-in-95 duration-200">
+      <div className="relative bg-white w-full max-w-2xl rounded-[3.5rem] shadow-2xl border border-slate-100 flex flex-col animate-in zoom-in-95 duration-200 overflow-hidden">
         <div className="p-8 border-b border-slate-50 flex items-center justify-between bg-slate-50/40">
           <div className="flex items-center gap-5">
             <div className="w-14 h-14 bg-emerald-600 rounded-[1.25rem] flex items-center justify-center shadow-lg shadow-emerald-200">
@@ -694,7 +711,7 @@ const DataCleaningLab: React.FC<{
             </div>
             <div>
               <h3 className="text-2xl font-black text-slate-900 tracking-tight">Data Cleaning Lab</h3>
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Optimize dataset quality</p>
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Purify Dataset & Elevate Intelligence</p>
             </div>
           </div>
           <button onClick={onClose} className="p-3 hover:bg-white hover:shadow-sm rounded-2xl transition-all">
@@ -702,53 +719,83 @@ const DataCleaningLab: React.FC<{
           </button>
         </div>
 
-        <div className="p-10 space-y-8">
+        <div className="p-10 space-y-10 max-h-[70vh] overflow-y-auto">
           <div className="space-y-4">
-            <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Handle Missing Values</p>
-            <div className="grid grid-cols-1 gap-2">
-              {(['none', 'drop', 'impute_mean', 'impute_zero'] as const).map((method) => (
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] px-1">Integrity: Missing Values</p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {[
+                { id: 'none', label: 'Keep Raw', desc: 'No changes to missing cells' },
+                { id: 'drop', label: 'Drop Rows', desc: 'Remove records with nulls' },
+                { id: 'impute_mean', label: 'Impute Mean', desc: 'Fill with column average' },
+                { id: 'impute_zero', label: 'Impute Zero', desc: 'Fill with 0 value' },
+                { id: 'impute_mode', label: 'Impute Mode', desc: 'Fill with most frequent' }
+              ].map((method) => (
                 <button 
-                  key={method} 
-                  onClick={() => setOptions({ ...options, handleMissing: method })}
-                  className={`flex items-center justify-between p-4 rounded-2xl border-2 transition-all ${
-                    options.handleMissing === method ? 'border-emerald-600 bg-emerald-50 text-emerald-700' : 'border-transparent bg-slate-50 text-slate-500 hover:bg-slate-100'
+                  key={method.id} 
+                  onClick={() => setOptions({ ...options, handleMissing: method.id as any })}
+                  className={`flex flex-col items-start p-5 rounded-3xl border-2 text-left transition-all ${
+                    options.handleMissing === method.id ? 'border-emerald-600 bg-emerald-50 text-emerald-700 shadow-md' : 'border-transparent bg-slate-50 text-slate-500 hover:bg-slate-100'
                   }`}
                 >
-                  <span className="text-sm font-bold capitalize">{method.replace('_', ' ')}</span>
-                  {options.handleMissing === method && <Check className="w-5 h-5" />}
+                  <div className="flex items-center justify-between w-full mb-1">
+                    <span className="text-sm font-black uppercase tracking-tight">{method.label}</span>
+                    {options.handleMissing === method.id && <Check className="w-4 h-4" />}
+                  </div>
+                  <span className="text-[10px] font-bold opacity-70 leading-tight">{method.desc}</span>
                 </button>
               ))}
             </div>
           </div>
 
           <div className="space-y-4">
-            <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Quality Controls</p>
-            <div className="space-y-3">
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] px-1">Transformation Controls</p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <button 
                 onClick={() => setOptions({ ...options, removeDuplicates: !options.removeDuplicates })}
-                className={`w-full flex items-center justify-between p-4 rounded-2xl border-2 transition-all ${
-                  options.removeDuplicates ? 'border-indigo-600 bg-indigo-50 text-indigo-700' : 'border-transparent bg-slate-50 text-slate-500 hover:bg-slate-100'
+                className={`flex items-center justify-between p-5 rounded-3xl border-2 text-left transition-all ${
+                  options.removeDuplicates ? 'border-indigo-600 bg-indigo-50 text-indigo-700 shadow-md' : 'border-transparent bg-slate-50 text-slate-500 hover:bg-slate-100'
                 }`}
               >
-                <div className="flex items-center gap-3"><Layers className="w-5 h-5" /><span className="text-sm font-bold">Remove Duplicates</span></div>
-                {options.removeDuplicates ? <Check className="w-5 h-5" /> : <div className="w-5 h-5 border-2 border-slate-200 rounded-full" />}
+                <div className="flex flex-col">
+                   <div className="flex items-center gap-2 mb-1">
+                     <Layers className="w-4 h-4" />
+                     <span className="text-sm font-black uppercase tracking-tight">Deduplicate</span>
+                   </div>
+                   <span className="text-[10px] font-bold opacity-70">Remove identical rows</span>
+                </div>
+                {options.removeDuplicates ? <CheckCircle2 className="w-5 h-5 text-indigo-600" /> : <div className="w-5 h-5 border-2 border-slate-200 rounded-full" />}
               </button>
+
               <button 
                 onClick={() => setOptions({ ...options, standardizeText: !options.standardizeText })}
-                className={`w-full flex items-center justify-between p-4 rounded-2xl border-2 transition-all ${
-                  options.standardizeText ? 'border-indigo-600 bg-indigo-50 text-indigo-700' : 'border-transparent bg-slate-50 text-slate-500 hover:bg-slate-100'
+                className={`flex items-center justify-between p-5 rounded-3xl border-2 text-left transition-all ${
+                  options.standardizeText ? 'border-indigo-600 bg-indigo-50 text-indigo-700 shadow-md' : 'border-transparent bg-slate-50 text-slate-500 hover:bg-slate-100'
                 }`}
               >
-                <div className="flex items-center gap-3"><FileType className="w-5 h-5" /><span className="text-sm font-bold">Standardize Text (Trim)</span></div>
-                {options.standardizeText ? <Check className="w-5 h-5" /> : <div className="w-5 h-5 border-2 border-slate-200 rounded-full" />}
+                <div className="flex flex-col">
+                   <div className="flex items-center gap-2 mb-1">
+                     <FileType className="w-4 h-4" />
+                     <span className="text-sm font-black uppercase tracking-tight">Trim Text</span>
+                   </div>
+                   <span className="text-[10px] font-bold opacity-70">Remove whitespace wraps</span>
+                </div>
+                {options.standardizeText ? <CheckCircle2 className="w-5 h-5 text-indigo-600" /> : <div className="w-5 h-5 border-2 border-slate-200 rounded-full" />}
               </button>
             </div>
           </div>
         </div>
 
-        <div className="p-10 bg-slate-50 border-t border-slate-100 flex gap-4">
-          <button onClick={onClose} className="flex-1 py-4 bg-white border border-slate-200 rounded-2xl text-sm font-black text-slate-600 hover:bg-slate-100 transition-all">Cancel</button>
-          <button onClick={() => onApply(options)} className="flex-1 py-4 bg-emerald-600 text-white rounded-2xl text-sm font-black hover:bg-emerald-700 transition-all shadow-xl shadow-emerald-100">Apply & Re-analyze</button>
+        <div className="p-10 bg-slate-50 border-t border-slate-100 flex flex-col md:flex-row gap-4 items-center justify-between">
+          <div className="flex items-center gap-3 text-slate-400">
+             <Shield className="w-5 h-5" />
+             <p className="text-[10px] font-bold leading-tight">Gemini 3 will re-index entire matrix<br/>after cleaning application.</p>
+          </div>
+          <div className="flex gap-4 w-full md:w-auto">
+             <button onClick={onClose} className="flex-1 md:flex-none px-10 py-4 bg-white border border-slate-200 rounded-2xl text-[11px] font-black uppercase tracking-widest text-slate-600 hover:bg-slate-100 transition-all">Cancel</button>
+             <button onClick={() => onApply(options)} className="flex-1 md:flex-none px-12 py-4 bg-emerald-600 text-white rounded-2xl text-[11px] font-black uppercase tracking-widest hover:bg-emerald-700 transition-all shadow-xl shadow-emerald-100 flex items-center justify-center gap-2">
+               Apply & Re-analyze <Sparkle className="w-4 h-4" />
+             </button>
+          </div>
         </div>
       </div>
     </div>
@@ -780,31 +827,19 @@ const AnalysisDashboard: React.FC<AnalysisDashboardProps> = ({ analysis, reportN
 
   const handleApplyCleaning = (options: DataCleaningOptions) => {
     let cleaned = [...data];
+    
+    // 1. Text Standardization
     if (options.standardizeText) {
       cleaned = cleaned.map(row => {
-        const newRow: any = {};
-        Object.keys(row).forEach(k => {
-          if (typeof row[k] === 'string') newRow[k] = row[k].trim();
-          else newRow[k] = row[k];
+        const newRow: any = { ...row };
+        Object.keys(newRow).forEach(k => {
+          if (typeof newRow[k] === 'string') newRow[k] = newRow[k].trim();
         });
         return newRow;
       });
     }
-    if (options.handleMissing === 'drop') {
-      cleaned = cleaned.filter(row => !Object.values(row).some(v => v === null || v === undefined || v === ''));
-    } else if (options.handleMissing !== 'none') {
-      const cols = Object.keys(data[0] || {});
-      cols.forEach(col => {
-        const numericValues = data.map(r => r[col]).filter(v => typeof v === 'number') as number[];
-        const isNumeric = numericValues.length > 0;
-        if (options.handleMissing === 'impute_mean' && isNumeric) {
-          const mean = numericValues.reduce((a, b) => a + b, 0) / numericValues.length;
-          cleaned = cleaned.map(row => (row[col] === null || row[col] === undefined || row[col] === '') ? { ...row, [col]: mean } : row);
-        } else if (options.handleMissing === 'impute_zero') {
-          cleaned = cleaned.map(row => (row[col] === null || row[col] === undefined || row[col] === '') ? { ...row, [col]: 0 } : row);
-        }
-      });
-    }
+
+    // 2. Remove Duplicates
     if (options.removeDuplicates) {
       const seen = new Set();
       cleaned = cleaned.filter(row => {
@@ -814,8 +849,48 @@ const AnalysisDashboard: React.FC<AnalysisDashboardProps> = ({ analysis, reportN
         return true;
       });
     }
+
+    // 3. Handle Missing Values
+    if (options.handleMissing !== 'none') {
+      const cols = Object.keys(data[0] || {});
+      
+      if (options.handleMissing === 'drop') {
+        cleaned = cleaned.filter(row => !Object.values(row).some(v => v === null || v === undefined || v === ''));
+      } else {
+        cols.forEach(col => {
+          const values = cleaned.map(r => r[col]).filter(v => v !== null && v !== undefined && v !== '');
+          
+          if (options.handleMissing === 'impute_mean') {
+            const numericValues = values.filter(v => typeof v === 'number') as number[];
+            if (numericValues.length > 0) {
+              const mean = numericValues.reduce((a, b) => a + b, 0) / numericValues.length;
+              cleaned = cleaned.map(row => (row[col] === null || row[col] === undefined || row[col] === '') ? { ...row, [col]: mean } : row);
+            }
+          } else if (options.handleMissing === 'impute_zero') {
+            cleaned = cleaned.map(row => (row[col] === null || row[col] === undefined || row[col] === '') ? { ...row, [col]: 0 } : row);
+          } else if (options.handleMissing === 'impute_mode') {
+            if (values.length > 0) {
+              const counts: Record<string, number> = {};
+              values.forEach(v => counts[String(v)] = (counts[String(v)] || 0) + 1);
+              const mode = Object.keys(counts).reduce((a, b) => counts[a] > counts[b] ? a : b);
+              cleaned = cleaned.map(row => (row[col] === null || row[col] === undefined || row[col] === '') ? { ...row, [col]: isNaN(Number(mode)) ? mode : Number(mode) } : row);
+            }
+          }
+        });
+      }
+    }
+
     if (onReanalyze) {
-      onReanalyze(cleaned, reportName, { model: 'pro', detailLevel: 'standard', features: { trendPrediction: true, anomalyDetection: true, correlationAnalysis: true, strategicForecasting: true } });
+      onReanalyze(cleaned, reportName, { 
+        model: 'pro', 
+        detailLevel: 'standard', 
+        features: { 
+          trendPrediction: true, 
+          anomalyDetection: true, 
+          correlationAnalysis: true, 
+          strategicForecasting: true 
+        } 
+      });
     }
     setShowCleaningLab(false);
   };
@@ -869,10 +944,10 @@ const AnalysisDashboard: React.FC<AnalysisDashboardProps> = ({ analysis, reportN
         </div>
         <div className="flex flex-wrap items-center gap-3 relative">
           <div className="bg-white p-1.5 rounded-[2rem] border border-slate-200 shadow-sm flex gap-1.5">
-             <button onClick={() => setShowPaletteSelector(!showPaletteSelector)} className={`p-3 rounded-2xl transition-all ${showPaletteSelector ? 'bg-indigo-600 text-white shadow-lg' : 'hover:bg-slate-50 text-indigo-600'}`}><Palette className="w-6 h-6" /></button>
-             <button onClick={() => setShowCleaningLab(true)} className="p-3 hover:bg-slate-50 rounded-2xl transition-all"><Eraser className="w-6 h-6 text-emerald-600" /></button>
-             <button onClick={exportToPdf} disabled={isCapturingPdf} className="p-3 hover:bg-slate-50 rounded-2xl transition-all"><FileDown className="w-6 h-6 text-indigo-600" /></button>
-             <button onClick={exportMarkdown} className="p-3 hover:bg-slate-50 rounded-2xl transition-all"><FileCode className="w-6 h-6 text-indigo-600" /></button>
+             <button onClick={() => setShowPaletteSelector(!showPaletteSelector)} className={`p-3 rounded-2xl transition-all ${showPaletteSelector ? 'bg-indigo-600 text-white shadow-lg' : 'hover:bg-slate-50 text-indigo-600'}`} title="Color Architectures"><Palette className="w-6 h-6" /></button>
+             <button onClick={() => setShowCleaningLab(true)} className="p-3 hover:bg-slate-50 rounded-2xl transition-all" title="Cleaning Lab"><Eraser className="w-6 h-6 text-emerald-600" /></button>
+             <button onClick={exportToPdf} disabled={isCapturingPdf} className="p-3 hover:bg-slate-50 rounded-2xl transition-all" title="Export PDF"><FileDown className="w-6 h-6 text-indigo-600" /></button>
+             <button onClick={exportMarkdown} className="p-3 hover:bg-slate-50 rounded-2xl transition-all" title="Export Markdown"><FileCode className="w-6 h-6 text-indigo-600" /></button>
           </div>
 
           {showPaletteSelector && (

@@ -75,7 +75,8 @@ const LiveSession: React.FC<{ onClose: () => void }> = ({ onClose }) => {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
 
     const sessionPromise = ai.live.connect({
-      model: 'gemini-2.5-flash-native-audio-preview-09-2025',
+      // Fix: Updated model name according to guidelines
+      model: 'gemini-2.5-flash-native-audio-preview-12-2025',
       callbacks: {
         onopen: () => {
           const source = inputAudioCtx.current!.createMediaStreamSource(stream);
